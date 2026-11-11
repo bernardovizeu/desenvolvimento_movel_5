@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   FlatList,
   ActivityIndicator,
   StyleSheet,
+  Modal,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -19,10 +20,182 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 const Drawer = createDrawerNavigator();
 const Tab = createBottomTabNavigator();
 
-const API_URL = 'https://open.er-api.com/v6/latest/USD';
+const EXCHANGERATE_API_KEY = '';
+const API_URL = EXCHANGERATE_API_KEY
+  ? `https://v6.exchangerate-api.com/v6/${EXCHANGERATE_API_KEY}/latest/USD`
+  : 'https://open.er-api.com/v6/latest/USD';
+
 const STORAGE_KEY = '@conversor_moedas_favoritas';
 
-// 1. TELA INICIO (DRAWER)
+const NOMES_MOEDAS = {
+  BRL: 'Real Brasileiro',
+  USD: 'Dolar Americano',
+  EUR: 'Euro',
+  GBP: 'Libra Esterlina',
+  JPY: 'Iene Japones',
+  CAD: 'Dolar Canadense',
+  AUD: 'Dolar Australiano',
+  CHF: 'Franco Suico',
+  CNY: 'Yuan Chines',
+  ARS: 'Peso Argentino',
+  CLP: 'Peso Chileno',
+  COP: 'Peso Colombiano',
+  MXN: 'Peso Mexicano',
+  PEN: 'Sol Peruano',
+  UYU: 'Peso Uruguaio',
+  INR: 'Rupia Indiana',
+  KRW: 'Won Sul-Coreano',
+  RUB: 'Rublo Russo',
+  TRY: 'Lira Turca',
+  ZAR: 'Rand Sul-Africano',
+  SEK: 'Coroa Sueca',
+  NOK: 'Coroa Norueguesa',
+  DKK: 'Coroa Dinamarquesa',
+  NZD: 'Dolar Neozelandes',
+  SGD: 'Dolar de Cingapura',
+  HKD: 'Dolar de Hong Kong',
+};
+
+function obterDescricaoMoeda(codigo) {
+  if (!codigo) return '';
+  const chave = codigo.toUpperCase();
+  return NOMES_MOEDAS[chave] || '';
+}
+
+function DropdownMoeda({
+  rotulo,
+  valorSelecionado,
+  aoSelecionar,
+  opcoes = [],
+  desabilitado = false,
+}) {
+  const [modalAberto, setModalAberto] = useState(false);
+  const [termoBusca, setTermoBusca] = useState('');
+
+  const descricao = obterDescricaoMoeda(valorSelecionado);
+
+  const opcoesFiltradas = useMemo(() => {
+    const termo = termoBusca.trim().toLowerCase();
+    if (!termo) return opcoes;
+    return opcoes.filter((item) => {
+      const codigo = (item.codigo || '').toLowerCase();
+      const nome = (NOMES_MOEDAS[item.codigo] || '').toLowerCase();
+      return codigo.includes(termo) || nome.includes(termo);
+    });
+  }, [opcoes, termoBusca]);
+
+  const fecharModal = () => {
+    setModalAberto(false);
+    setTermoBusca('');
+  };
+
+  const selecionarMoeda = (codigo) => {
+    aoSelecionar(codigo);
+    fecharModal();
+  };
+
+  return (
+    <View style={styles.dropdownContainer}>
+      <Text style={styles.rotuloCampo}>{rotulo}</Text>
+      <TouchableOpacity
+        style={[styles.dropdownGatilho, desabilitado && styles.dropdownDesabilitado]}
+        onPress={() => !desabilitado && setModalAberto(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.dropdownTextoPrincipal}>
+          {valorSelecionado ? valorSelecionado : 'Selecione'}
+          {descricao ? ` - ${descricao}` : ''}
+        </Text>
+        <Text style={styles.dropdownTextoSeta}>v</Text>
+      </TouchableOpacity>
+
+      <Modal
+        visible={modalAberto}
+        animationType="none"
+        transparent={true}
+        onRequestClose={fecharModal}
+      >
+        <View style={styles.modalFundo}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalCabecalho}>
+              <Text style={styles.modalTitulo}>{rotulo}</Text>
+              <TouchableOpacity
+                style={styles.modalBotaoFechar}
+                onPress={fecharModal}
+              >
+                <Text style={styles.modalTextoFechar}>Fechar</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.boxBuscaModal}>
+              <TextInput
+                style={styles.inputBusca}
+                placeholder="Filtrar moeda por codigo ou nome..."
+                value={termoBusca}
+                onChangeText={setTermoBusca}
+                autoCapitalize="characters"
+              />
+            </View>
+
+            <FlatList
+              data={opcoesFiltradas}
+              keyExtractor={(item) => item.codigo}
+              keyboardShouldPersistTaps="handled"
+              initialNumToRender={20}
+              maxToRenderPerBatch={25}
+              renderItem={({ item }) => {
+                const nome = NOMES_MOEDAS[item.codigo];
+                const selecionado = item.codigo === valorSelecionado;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.modalItemMoeda,
+                      selecionado && styles.modalItemMoedaSelecionado,
+                    ]}
+                    onPress={() => selecionarMoeda(item.codigo)}
+                  >
+                    <View style={styles.modalItemInfo}>
+                      <Text
+                        style={[
+                          styles.modalItemCodigo,
+                          selecionado && styles.modalItemCodigoSelecionado,
+                        ]}
+                      >
+                        {item.codigo}
+                      </Text>
+                      {nome ? (
+                        <Text style={styles.modalItemNome}> - {nome}</Text>
+                      ) : null}
+                    </View>
+                    {selecionado ? (
+                      <Text style={styles.modalItemCheck}>[Selecionada]</Text>
+                    ) : item.taxa ? (
+                      <Text style={styles.modalItemTaxa}>
+                        {typeof item.taxa === 'number'
+                          ? item.taxa.toFixed(4)
+                          : item.taxa}
+                      </Text>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              }}
+              ItemSeparatorComponent={() => <View style={styles.divisorLista} />}
+              ListEmptyComponent={() => (
+                <View style={styles.boxVazio}>
+                  <Text style={styles.textoVazio}>
+                    Nenhuma moeda encontrada para o filtro informado.
+                  </Text>
+                </View>
+              )}
+              contentContainerStyle={styles.listaConteudo}
+            />
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
 function TelaInicio({ navigation }) {
   return (
     <SafeAreaView style={styles.safeContainer} edges={['bottom', 'left', 'right']}>
@@ -30,32 +203,14 @@ function TelaInicio({ navigation }) {
         <View style={styles.cardPrincipal}>
           <Text style={styles.tituloPrincipal}>Conversor de Moedas</Text>
           <Text style={styles.subtituloPrincipal}>
-            Aplicativo Desenvolvido em React Native
+            Cotacoes e Conversoes
           </Text>
 
           <View style={styles.divisor} />
 
-          <Text style={styles.secaoTitulo}>Objetivo do Aplicativo:</Text>
           <Text style={styles.textoCorpo}>
-            Construir um conversor de moedas completo que consome dados da API
-            ExchangeRate-API em tempo real, permite favoritar moedas com
-            persistencia local via AsyncStorage e realizar conversoes diretas.
+            Aplicativo para consulta de cotacoes em tempo real e realizacao de conversoes diretas entre diferentes moedas.
           </Text>
-
-          <Text style={styles.secaoTitulo}>Estrutura de Navegacao:</Text>
-          <Text style={styles.textoCorpo}>
-            1. Menu Lateral (Drawer Navigation):
-          </Text>
-          <Text style={styles.textoItem}>- Inicio: Apresentacao do aplicativo</Text>
-          <Text style={styles.textoItem}>- Sobre: Informacoes institucionais do projeto</Text>
-          <Text style={styles.textoItem}>- Moedas: Central de cotacoes e conversoes</Text>
-
-          <Text style={styles.textoCorpo}>
-            2. Abas Inferiores (Bottom Tabs Navigation em Moedas):
-          </Text>
-          <Text style={styles.textoItem}>- Moedas: Lista de todas as taxas recuperadas da API</Text>
-          <Text style={styles.textoItem}>- Favoritas: Apenas as moedas marcadas pelo usuario</Text>
-          <Text style={styles.textoItem}>- Converter: Calculadora de conversao entre moedas</Text>
 
           <View style={styles.divisor} />
 
@@ -78,21 +233,20 @@ function TelaInicio({ navigation }) {
   );
 }
 
-// 2. TELA SOBRE (DRAWER)
 function TelaSobre({ navigation }) {
   return (
     <SafeAreaView style={styles.safeContainer} edges={['bottom', 'left', 'right']}>
       <View style={styles.containerTela}>
         <View style={styles.cardPrincipal}>
-          <Text style={styles.tituloPrincipal}>Sobre o Aplicativo</Text>
+          <Text style={styles.tituloPrincipal}>Sobre</Text>
           <Text style={styles.subtituloPrincipal}>
-            Informacoes Tecnicas e Autoria
+            Informacoes Gerais
           </Text>
 
           <View style={styles.divisor} />
 
           <View style={styles.linhaInfo}>
-            <Text style={styles.rotuloInfo}>Nome do App:</Text>
+            <Text style={styles.rotuloInfo}>Aplicativo:</Text>
             <Text style={styles.valorInfo}>Conversor de Moedas</Text>
           </View>
 
@@ -102,35 +256,9 @@ function TelaSobre({ navigation }) {
           </View>
 
           <View style={styles.linhaInfo}>
-            <Text style={styles.rotuloInfo}>Disciplina:</Text>
-            <Text style={styles.valorInfo}>Desenvolvimento Mobile (React Native)</Text>
-          </View>
-
-          <View style={styles.linhaInfo}>
-            <Text style={styles.rotuloInfo}>Referencia Didatica:</Text>
-            <Text style={styles.valorInfo}>Prof. Victor Vidigal Ribeiro</Text>
-          </View>
-
-          <View style={styles.linhaInfo}>
-            <Text style={styles.rotuloInfo}>API Utilizada:</Text>
-            <Text style={styles.valorInfo}>ExchangeRate-API (open.er-api.com)</Text>
-          </View>
-
-          <View style={styles.linhaInfo}>
-            <Text style={styles.rotuloInfo}>Persistencia:</Text>
-            <Text style={styles.valorInfo}>AsyncStorage (Local)</Text>
-          </View>
-
-          <View style={styles.linhaInfo}>
-            <Text style={styles.rotuloInfo}>Navegacao:</Text>
-            <Text style={styles.valorInfo}>Drawer + Bottom Tabs Integrados</Text>
-          </View>
-
-          <View style={styles.linhaInfo}>
-            <Text style={styles.rotuloInfo}>Proposito:</Text>
+            <Text style={styles.rotuloInfo}>Descricao:</Text>
             <Text style={styles.valorInfo}>
-              Aplicacao academica desenvolvida para exercitar consumo de API REST,
-              gerenciamento de estado e navegacao aninhada.
+              Ferramenta simples para acompanhamento de taxas de cambio e calculo de conversao entre moedas.
             </Text>
           </View>
 
@@ -148,7 +276,6 @@ function TelaSobre({ navigation }) {
   );
 }
 
-// 3. TELA MOEDAS (BOTTOM TAB 1)
 function TelaMoedas({
   moedas,
   favoritas,
@@ -159,9 +286,14 @@ function TelaMoedas({
 }) {
   const [busca, setBusca] = useState('');
 
-  const moedasFiltradas = moedas.filter((item) =>
-    item.codigo.toLowerCase().includes(busca.trim().toLowerCase())
-  );
+  const moedasFiltradas = moedas.filter((item) => {
+    const termo = busca.trim().toLowerCase();
+    const nome = (NOMES_MOEDAS[item.codigo] || '').toLowerCase();
+    return (
+      item.codigo.toLowerCase().includes(termo) ||
+      nome.includes(termo)
+    );
+  });
 
   return (
     <SafeAreaView style={styles.safeContainer} edges={['bottom', 'left', 'right']}>
@@ -177,7 +309,7 @@ function TelaMoedas({
           <Text style={styles.rotuloBusca}>Filtrar Moeda:</Text>
           <TextInput
             style={styles.inputBusca}
-            placeholder="Digite o codigo (ex: BRL, EUR, JPY)..."
+            placeholder="Digite o codigo ou nome (ex: BRL, EUR, USD)..."
             value={busca}
             onChangeText={setBusca}
             autoCapitalize="characters"
@@ -205,12 +337,16 @@ function TelaMoedas({
             keyExtractor={(item) => item.codigo}
             renderItem={({ item }) => {
               const ehFavorita = favoritas.includes(item.codigo);
+              const nome = NOMES_MOEDAS[item.codigo];
               return (
                 <View style={styles.itemMoeda}>
                   <View style={styles.infoMoeda}>
-                    <Text style={styles.codigoMoeda}>{item.codigo}</Text>
+                    <Text style={styles.codigoMoeda}>
+                      {item.codigo}
+                      {nome ? ` - ${nome}` : ''}
+                    </Text>
                     <Text style={styles.taxaMoeda}>
-                      Taxa: {item.taxa} USD
+                      1 USD = {item.taxa} {item.codigo}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -246,7 +382,6 @@ function TelaMoedas({
   );
 }
 
-// 4. TELA FAVORITAS (BOTTOM TAB 2)
 function TelaFavoritas({ moedas, favoritas, alternarFavorita }) {
   const moedasFavoritas = moedas.filter((item) => favoritas.includes(item.codigo));
 
@@ -263,22 +398,28 @@ function TelaFavoritas({ moedas, favoritas, alternarFavorita }) {
         <FlatList
           data={moedasFavoritas}
           keyExtractor={(item) => item.codigo}
-          renderItem={({ item }) => (
-            <View style={styles.itemMoeda}>
-              <View style={styles.infoMoeda}>
-                <Text style={styles.codigoMoeda}>{item.codigo}</Text>
-                <Text style={styles.taxaMoeda}>
-                  Taxa: {item.taxa} USD
-                </Text>
+          renderItem={({ item }) => {
+            const nome = NOMES_MOEDAS[item.codigo];
+            return (
+              <View style={styles.itemMoeda}>
+                <View style={styles.infoMoeda}>
+                  <Text style={styles.codigoMoeda}>
+                    {item.codigo}
+                    {nome ? ` - ${nome}` : ''}
+                  </Text>
+                  <Text style={styles.taxaMoeda}>
+                    1 USD = {item.taxa} {item.codigo}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.botaoRemover}
+                  onPress={() => alternarFavorita(item.codigo)}
+                >
+                  <Text style={styles.textoBotaoRemover}>[Remover]</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={styles.botaoRemover}
-                onPress={() => alternarFavorita(item.codigo)}
-              >
-                <Text style={styles.textoBotaoRemover}>[Remover]</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+            );
+          }}
           ItemSeparatorComponent={() => <View style={styles.divisorLista} />}
           ListEmptyComponent={() => (
             <View style={styles.boxVazio}>
@@ -297,24 +438,44 @@ function TelaFavoritas({ moedas, favoritas, alternarFavorita }) {
   );
 }
 
-// 5. TELA CONVERTER (BOTTOM TAB 3)
-function TelaConverter({ taxasMap }) {
+function TelaConverter({ taxasMap, moedas = [], carregando }) {
   const [moedaOrigem, setMoedaOrigem] = useState('USD');
   const [moedaDestino, setMoedaDestino] = useState('BRL');
   const [valorInput, setValorInput] = useState('100');
   const [resultado, setResultado] = useState(null);
   const [mensagemErro, setMensagemErro] = useState('');
 
+  const listaOpcoes = useMemo(() => {
+    if (moedas && moedas.length > 0) {
+      return moedas;
+    }
+    const codigosPadrao = [
+      'USD', 'BRL', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF',
+      'CNY', 'ARS', 'CLP', 'COP', 'MXN', 'INR', 'KRW', 'RUB',
+    ];
+    return codigosPadrao.map((c) => ({
+      codigo: c,
+      taxa: taxasMap && taxasMap[c] ? taxasMap[c] : null,
+    }));
+  }, [moedas, taxasMap]);
+
+  const inverterMoedas = () => {
+    const temp = moedaOrigem;
+    setMoedaOrigem(moedaDestino);
+    setMoedaDestino(temp);
+    setResultado(null);
+  };
+
   const converter = () => {
     setMensagemErro('');
     setResultado(null);
 
-    const origem = moedaOrigem.trim().toUpperCase();
-    const destino = moedaDestino.trim().toUpperCase();
+    const origem = moedaOrigem ? moedaOrigem.trim().toUpperCase() : '';
+    const destino = moedaDestino ? moedaDestino.trim().toUpperCase() : '';
     const valorNumerico = parseFloat(valorInput.replace(',', '.'));
 
     if (!origem || !destino) {
-      setMensagemErro('Preencha os campos Moeda Origem e Moeda Destino.');
+      setMensagemErro('Selecione as moedas de Origem e Destino.');
       return;
     }
 
@@ -324,7 +485,7 @@ function TelaConverter({ taxasMap }) {
     }
 
     if (!taxasMap || Object.keys(taxasMap).length === 0) {
-      setMensagemErro('As cotacoes ainda nao foram carregadas da API.');
+      setMensagemErro('As cotacoes da API ainda nao foram carregadas.');
       return;
     }
 
@@ -341,6 +502,7 @@ function TelaConverter({ taxasMap }) {
     const taxaOrigem = taxasMap[origem];
     const taxaDestino = taxasMap[destino];
     const taxaConversao = taxaDestino / taxaOrigem;
+    const taxaReversa = taxaOrigem / taxaDestino;
     const valorConvertido = valorNumerico * taxaConversao;
 
     setResultado({
@@ -349,6 +511,7 @@ function TelaConverter({ taxasMap }) {
       valorDestino: valorConvertido,
       moedaDestino: destino,
       taxaConversao: taxaConversao,
+      taxaReversa: taxaReversa,
     });
   };
 
@@ -358,36 +521,51 @@ function TelaConverter({ taxasMap }) {
         <View style={styles.cabecalhoSecao}>
           <Text style={styles.tituloSecao}>Conversor de Moedas</Text>
           <Text style={styles.subtituloSecao}>
-            Calcule a conversao direta entre duas moedas
+            Selecione as moedas no menu e calcule a conversao
           </Text>
         </View>
 
         <View style={styles.cardFormulario}>
-          <Text style={styles.rotuloCampo}>Moeda Origem:</Text>
-          <TextInput
-            style={styles.inputForm}
-            value={moedaOrigem}
-            onChangeText={setMoedaOrigem}
-            placeholder="Ex: USD"
-            autoCapitalize="characters"
-            maxLength={5}
+          <DropdownMoeda
+            rotulo="Moeda de Origem:"
+            valorSelecionado={moedaOrigem}
+            aoSelecionar={(codigo) => {
+              setMoedaOrigem(codigo);
+              setResultado(null);
+            }}
+            opcoes={listaOpcoes}
+            desabilitado={carregando}
           />
 
-          <Text style={styles.rotuloCampo}>Moeda Destino:</Text>
-          <TextInput
-            style={styles.inputForm}
-            value={moedaDestino}
-            onChangeText={setMoedaDestino}
-            placeholder="Ex: BRL"
-            autoCapitalize="characters"
-            maxLength={5}
+          <View style={styles.linhaInverter}>
+            <TouchableOpacity
+              style={styles.botaoInverter}
+              onPress={inverterMoedas}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.textoBotaoInverter}>Inverter Moedas</Text>
+            </TouchableOpacity>
+          </View>
+
+          <DropdownMoeda
+            rotulo="Moeda de Destino:"
+            valorSelecionado={moedaDestino}
+            aoSelecionar={(codigo) => {
+              setMoedaDestino(codigo);
+              setResultado(null);
+            }}
+            opcoes={listaOpcoes}
+            desabilitado={carregando}
           />
 
           <Text style={styles.rotuloCampo}>Valor a ser convertido:</Text>
           <TextInput
             style={styles.inputForm}
             value={valorInput}
-            onChangeText={setValorInput}
+            onChangeText={(texto) => {
+              setValorInput(texto);
+              setResultado(null);
+            }}
             placeholder="Ex: 100"
             keyboardType="numeric"
           />
@@ -398,6 +576,7 @@ function TelaConverter({ taxasMap }) {
               onPress={() => {
                 setMoedaOrigem('USD');
                 setMoedaDestino('BRL');
+                setResultado(null);
               }}
             >
               <Text style={styles.textoBotaoAtalho}>USD para BRL</Text>
@@ -408,6 +587,7 @@ function TelaConverter({ taxasMap }) {
               onPress={() => {
                 setMoedaOrigem('EUR');
                 setMoedaDestino('BRL');
+                setResultado(null);
               }}
             >
               <Text style={styles.textoBotaoAtalho}>EUR para BRL</Text>
@@ -418,14 +598,21 @@ function TelaConverter({ taxasMap }) {
               onPress={() => {
                 setMoedaOrigem('BRL');
                 setMoedaDestino('USD');
+                setResultado(null);
               }}
             >
               <Text style={styles.textoBotaoAtalho}>BRL para USD</Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.botaoConverter} onPress={converter}>
-            <Text style={styles.textoBotaoConverter}>Converter</Text>
+          <TouchableOpacity
+            style={[styles.botaoConverter, carregando && styles.botaoDesabilitado]}
+            onPress={converter}
+            disabled={carregando}
+          >
+            <Text style={styles.textoBotaoConverter}>
+              {carregando ? 'Carregando Cotacoes...' : 'Converter'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -439,23 +626,34 @@ function TelaConverter({ taxasMap }) {
           <View style={styles.cardResultado}>
             <Text style={styles.tituloResultado}>Resultado da Conversao:</Text>
             <View style={styles.divisor} />
+
             <View style={styles.linhaResultado}>
               <Text style={styles.rotuloResultado}>Valor Origem:</Text>
               <Text style={styles.valorResultado}>
                 {resultado.valorOrigem.toFixed(2)} {resultado.moedaOrigem}
               </Text>
             </View>
+
             <View style={styles.linhaResultado}>
               <Text style={styles.rotuloResultado}>Valor Destino:</Text>
               <Text style={styles.valorResultado}>
                 {resultado.valorDestino.toFixed(4)} {resultado.moedaDestino}
               </Text>
             </View>
+
             <View style={styles.linhaResultado}>
-              <Text style={styles.rotuloResultado}>Taxa de Conversao:</Text>
+              <Text style={styles.rotuloResultado}>Taxa direta:</Text>
               <Text style={styles.valorResultado}>
                 1 {resultado.moedaOrigem} = {resultado.taxaConversao.toFixed(6)}{' '}
                 {resultado.moedaDestino}
+              </Text>
+            </View>
+
+            <View style={styles.linhaResultado}>
+              <Text style={styles.rotuloResultado}>Taxa inversa:</Text>
+              <Text style={styles.valorResultado}>
+                1 {resultado.moedaDestino} = {resultado.taxaReversa.toFixed(6)}{' '}
+                {resultado.moedaOrigem}
               </Text>
             </View>
           </View>
@@ -465,7 +663,6 @@ function TelaConverter({ taxasMap }) {
   );
 }
 
-// 6. NAVEGADOR DE ABAS (BOTTOM TABS)
 function AbasMoedas() {
   const [moedas, setMoedas] = useState([]);
   const [taxasMap, setTaxasMap] = useState({});
@@ -478,15 +675,24 @@ function AbasMoedas() {
     setErro(null);
 
     fetch(API_URL)
-      .then((resposta) => resposta.json())
+      .then((resposta) => {
+        if (!resposta.ok) {
+          throw new Error(`Falha HTTP: ${resposta.status}`);
+        }
+        return resposta.json();
+      })
       .then((dados) => {
-        if (dados && dados.rates) {
-          setTaxasMap(dados.rates);
-          const lista = Object.keys(dados.rates).map((codigo) => ({
+        const taxas = dados.conversion_rates || dados.rates;
+        if (dados && dados.result === 'success' && taxas) {
+          setTaxasMap(taxas);
+          const lista = Object.keys(taxas).map((codigo) => ({
             codigo: codigo,
-            taxa: dados.rates[codigo],
+            taxa: taxas[codigo],
           }));
+          lista.sort((a, b) => a.codigo.localeCompare(b.codigo));
           setMoedas(lista);
+        } else if (dados && dados['error-type']) {
+          setErro(`Erro retornado pela API: ${dados['error-type']}`);
         } else {
           setErro('Formato de resposta inesperado da API.');
         }
@@ -581,6 +787,7 @@ function AbasMoedas() {
             {...props}
             taxasMap={taxasMap}
             moedas={moedas}
+            carregando={carregando}
           />
         )}
       </Tab.Screen>
@@ -588,7 +795,6 @@ function AbasMoedas() {
   );
 }
 
-// 7. COMPONENTE PRINCIPAL (DRAWER)
 export default function App() {
   return (
     <SafeAreaProvider style={styles.containerApp}>
@@ -636,7 +842,6 @@ export default function App() {
   );
 }
 
-// 8. ESTILOS (STYLESHEET)
 const styles = StyleSheet.create({
   containerApp: {
     flex: 1,
@@ -674,24 +879,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#dddddd',
     marginVertical: 10,
   },
-  secaoTitulo: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#222222',
-    marginTop: 8,
-    marginBottom: 4,
-  },
   textoCorpo: {
     fontSize: 13,
     color: '#444444',
     lineHeight: 18,
     marginBottom: 6,
-  },
-  textoItem: {
-    fontSize: 12,
-    color: '#555555',
-    marginLeft: 10,
-    marginBottom: 3,
   },
   botaoPrincipal: {
     backgroundColor: '#0044aa',
@@ -728,7 +920,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: 'bold',
     color: '#222222',
-    width: 140,
+    width: 100,
   },
   valorInfo: {
     fontSize: 13,
@@ -815,7 +1007,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   codigoMoeda: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#111111',
   },
@@ -895,6 +1087,22 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     fontSize: 13,
   },
+  linhaInverter: {
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  botaoInverter: {
+    backgroundColor: '#eeeeee',
+    borderWidth: 1,
+    borderColor: '#aaaaaa',
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  textoBotaoInverter: {
+    color: '#333333',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   linhaBotoesRapidos: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -923,6 +1131,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
     marginTop: 4,
+  },
+  botaoDesabilitado: {
+    backgroundColor: '#888888',
+    borderColor: '#666666',
   },
   textoBotaoConverter: {
     color: '#ffffff',
@@ -959,6 +1171,114 @@ const styles = StyleSheet.create({
   },
   valorResultado: {
     fontSize: 13,
+    fontWeight: 'bold',
+    color: '#0044aa',
+  },
+  dropdownContainer: {
+    marginBottom: 6,
+  },
+  dropdownGatilho: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#aaaaaa',
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+  },
+  dropdownDesabilitado: {
+    backgroundColor: '#eeeeee',
+    borderColor: '#cccccc',
+  },
+  dropdownTextoPrincipal: {
+    fontSize: 13,
+    color: '#111111',
+    flex: 1,
+  },
+  dropdownTextoSeta: {
+    fontSize: 12,
+    color: '#555555',
+    marginLeft: 8,
+    fontWeight: 'bold',
+  },
+  modalFundo: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    padding: 14,
+  },
+  modalCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#333333',
+    maxHeight: '85%',
+    padding: 12,
+  },
+  modalCabecalho: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitulo: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#111111',
+  },
+  modalBotaoFechar: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#999999',
+    backgroundColor: '#eeeeee',
+  },
+  modalTextoFechar: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#333333',
+  },
+  boxBuscaModal: {
+    marginBottom: 8,
+  },
+  modalItemMoeda: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#dddddd',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  modalItemMoedaSelecionado: {
+    backgroundColor: '#e6f0ff',
+    borderColor: '#0044aa',
+  },
+  modalItemInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  modalItemCodigo: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#111111',
+  },
+  modalItemCodigoSelecionado: {
+    color: '#0044aa',
+  },
+  modalItemNome: {
+    fontSize: 12,
+    color: '#555555',
+  },
+  modalItemTaxa: {
+    fontSize: 12,
+    color: '#666666',
+    marginLeft: 8,
+  },
+  modalItemCheck: {
+    fontSize: 11,
     fontWeight: 'bold',
     color: '#0044aa',
   },
